@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web3 Example</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 480px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        .input-group label {
+            margin-bottom: 5px;
+        }
+
+        .input-group input[type="text"] {
+            padding: 5px;
+        }
+
+        .button-group {
+            margin-bottom: 10px;
+        }
+
+        .button-group button {
+            padding: 5px 10px;
+        }
+
+        .output {
+            width: 100%;
+            height: 200px;
+            resize: vertical;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="input-group">
+        <label for="privateKey">Private Key:</label>
+        <input type="text" id="privateKey">
+    </div>
+
+    <div class="input-group">
+        <label for="rpcUrl">RPC URL:</label>
+        <input type="text" id="rpcUrl">
+    </div>
+
+    <div class="input-group">
+        <label for="limit">Limit:</label>
+        <input type="text" id="limit">
+    </div>
+
+    <div class="button-group">
+        <button onclick="mintTokens()">Execute</button>
+        <button onclick="stopMint()">Stop</button>
+    </div>
+
+    <textarea id="output" class="output"></textarea>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/web3@1.6.0/dist/web3.min.js"></script>
+<script>
+
+    function appendText(textToAppend) {
+        const textarea = document.getElementById('output');
+        textarea.value += textToAppend + '\n';
+        textarea.scrollTop = textarea.scrollHeight;
+    }
+
+    var stop_minting = false;
+    function stopMint() {
+        stop_minting = true;
+        appendText("Stopped");
+    }
+
+    async function mintTokens() {
+        const privateKey = document.getElementById("privateKey").value;
+        const rpcUrl = document.getElementById("rpcUrl").value;
+        const lim = document.getElementById("limit").value || 300;
+
+        if (!privateKey) {
+            console.log("No privatekey");
+            appendText("No private key");
+            return;
+        }
+        if (!rpcUrl) {
+            console.log("No RPC");
+            appendText("No RPC");
+            return;
+        }
+
+        const web3 = new Web3(rpcUrl);
+        const from_address = web3.eth.accounts.privateKeyToAccount(privateKey).address;
+        const to_address = from_address;
+        console.log('Address: ', from_address);
+        console.log('RPC connected: ', web3.eth.net.isListening());
+
+        let minted = 0;
+        stop_minting = false;
+
+        if (web3.eth.net.isListening()) {
+            const data = 'data:,{"p":"asc-20","op":"mint","tick":"aval","amt":"100000000"}'
+            // const _d = '0x646174613a2c7b2270223a226173632d3230222c226f70223a226d696e74222c227469636b223a226176616c222c22616d74223a22313030303030303030227d'
+            console.log("minting: ", web3.utils.toHex(data));
+
+            appendText("Minting: " + web3.utils.toHex(data));
+
+            for (let i = 0; i < lim; i++) {
+                if (stop_minting == true) {
+                    stop_minting = false;
+                    console.log("Stopped");
+                    break;
+                }
+                console.log('Balance: ', web3.utils.fromWei(await web3.eth.getBalance(from_address), 'ether'));
+                appendText("Balance: " + web3.utils.fromWei(await web3.eth.getBalance(from_address), 'ether'));
+                const nonce = await web3.eth.getTransactionCount(from_address);
+                const gas_price = await web3.eth.getGasPrice();
+                const gas_price_gwei = web3.utils.fromWei(gas_price, 'Gwei');
+                const transaction = {
+                    from: from_address,
+                    to: to_address,
+                    value: web3.utils.toWei('0', 'ether'),
+                    nonce: nonce,
+                    gas: 25000,
+                    gasPrice: gas_price,
+                    data: web3.utils.toHex(data),
+                    chainId: web3.eth.chainId
+                };
+                const signed = await web3.eth.accounts.signTransaction(transaction, privateKey);
+                console.log("Signed ", signed);
+                try {
+                    const tx_hash = await web3.eth.sendSignedTransaction(signed.rawTransaction);
+                    console.log("Hash:", tx_hash.transactionHash, 'nonce:',nonce);
+                    const receipt = await web3.eth.getTransactionReceipt(tx_hash.transactionHash);  // Timeout in seconds
+                    console.log("Receipt:", receipt);
+                    if (receipt.status === true) {
+                        minted++;
+                        console.log(`${minted} Mint Success!`);
+                        appendText(`${minted} Mint Success!`);
+                    }
+                } catch (error) {
+                    console.log('Meet exception, continue', error, 'transaction: ', transaction);
+                }
+            }
+        }
+    }
+</script>
+</body>
+</html>
